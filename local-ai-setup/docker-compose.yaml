@@ -1,0 +1,52 @@
+services:
+  smollm2-llm:
+    image: ai/smollm2-vllm:135M@sha256:4951f8c986b16e1617926290e78f45b15660c136405ecb63511732d572d3e466
+    container_name: smollm2-llm-1
+    ports:
+      - "your-value-goes-here:11434:11434"
+    volumes:
+      - smollm2-llm:/root/.smollm2-llm
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  qwen3-llm:
+    image: ai/qwen3:0.6B-Q4_K_M@sha256:18e5114fc13b1abd44b7fa36e24c951ab31c66d4aeccf3f6836a97f99f339923
+    container_name: qwen3-llm-1
+    ports:
+      - "your-value-goes-here:11435:11434"
+    volumes:
+      - qwen3-llm:/root/.qwen3-llm
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:v0.8.10
+    container_name: open-webui-1
+    restart: always
+    ports:
+      - "your-value-goes-here:3000:3000"
+    environment:
+      # We point to the service names and their internal ports
+      # modify to ? BASE_URLS
+      # 2 - ? modify to your-value-goes-here:PORTNUMBER/api;... 
+      - OLLAMA_BASE_URLS=http://smollm2-llm:11434;http://qwen3-llm:11435
+    volumes:
+      - open-webui:/app/backend/data
+    depends_on:
+      - smollm2-llm
+      - qwen3-llm
+
+volumes:
+  smollm2-llm:
+  qwen3-llm:
+  open-webui:

@@ -1,0 +1,6 @@
+- rule: Detect /dev/mem Access
+  desc: Detect processes that attempt to read /dev/mem
+  condition: (evt.type=open or evt.type=openat) and fd.name=/dev/mem
+  output: "Process %proc.name accessed /dev/mem (command=%proc.cmdline user=%user.name container=%container.id image=%container.image.repository)"
+  priority: WARNING
+  tags: [security]
