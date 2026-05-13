@@ -11,20 +11,22 @@ services:
     image: ghcr.io/open-webui/open-webui:v0.8.12
     container_name: open-webui-1
     ports:
-      - "your-value-goes-here:3000:3000"   # localhost only — never 0.0.0.0
+      - "your-value-goes-here:3000:8080"   # localhost only — never 0.0.0.0
     networks:
       - webui-dmz     # exposes the host port
     environment:
-      # We point to the service names and their internal ports
-      # modify to ? BASE_URLS
-      # 2 - ? modify to your-value-goes-here:PORTNUMBER/api;... 
-      # Both LLMs are reached by service name on their INTERNAL port (11434)
-      # qwen3 maps host 11434 internally, so here we use 11434 directly
+      # We point to the service names and their internal ports. 
+      # modify to  
+      # your-value-goes-here:PORTNUMBER 
       - OPENAI_API_BASE_URL=http://model-runner.docker.internal/engines/llama.cpp/v1
       - OPENAI_API_KEY=ignored          # required field but value doesn't matter
       - OFFLINE_MODE=true         # disables telemetry and update checks
+      # Restrict CORS to your local access point
+      - CORS_ALLOW_ORIGIN=http://localhost:3000;http://your-value-goes-here:3000
+      # Silence the LangChain warning
+      - USER_AGENT=Open-WebUI-Local
     extra_hosts:
-      - "model-runner.docker.internal:host-gateway"  # resolves the Docker Desktop endpoint
+      - host.docker.internal:host-gateway   # resolves the Docker Desktop endpoint
     volumes:
       - open-webui:/app/backend/data
     security_opt:
