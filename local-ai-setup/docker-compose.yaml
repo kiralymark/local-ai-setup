@@ -6,12 +6,34 @@ networks:
     driver: bridge
 
 volumes:
-  smollm2-llm:
-  qwen3-llm:
+  ollama-data:
   open-webui:
   falco-logs:
 
 services:
+  ollama:
+    image: ollama/ollama:0.20.2@sha256:45123a2e5b8cba2d886a60eeaa6a72c58eac135ad1414d3fd15c12f7eac7e75d
+    container_name: ollama-1
+    volumes:
+      - ollama-data:/root/.ollama
+    ports:
+      - "your-value-goes-here:11434:11434"
+    networks:
+      - ai-internal
+    deploy: # Optional: Enable this if you have an NVIDIA GPU
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+
+# FURTHER CHANGES REQUIRED?
+#
+# Integrate ollama instead ? -- X -- no, I dont want to ...
+
+
   smollm2-llm:
     image: ai/smollm2-vllm:135M@sha256:4951f8c986b16e1617926290e78f45b15660c136405ecb63511732d572d3e466
     container_name: smollm2-llm-1
