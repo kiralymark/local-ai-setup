@@ -15,11 +15,12 @@ services:
   smollm2-llm:
     image: ai/smollm2-vllm:135M@sha256:4951f8c986b16e1617926290e78f45b15660c136405ecb63511732d572d3e466
     container_name: smollm2-llm-1
+    command: ["/usr/bin/smollm2-llm", "-u"]
     # No host port binding — WebUI reaches it over ai-internal only
     networks:
       - ai-internal
     ports:
-      - "your-value-goes-here:11434"
+      - "your-value-goes-here:11434:11434"
     volumes:
       - smollm2-llm:/root/.smollm2-llm
     security_opt:
@@ -46,6 +47,7 @@ services:
   qwen3-llm:
     image: ai/qwen3:0.6B-Q4_K_M@sha256:18e5114fc13b1abd44b7fa36e24c951ab31c66d4aeccf3f6836a97f99f339923
     container_name: qwen3-llm-1
+    command: ["/usr/bin/qwen3-llm", "-u"]
     # No host port — WebUI uses the service name + internal port 11434
     networks:
       - ai-internal
@@ -73,8 +75,9 @@ services:
         max-file: "3"
 
   open-webui:
-    image: ghcr.io/open-webui/open-webui:v0.8.10
+    image: ghcr.io/open-webui/open-webui:v0.8.12
     container_name: open-webui-1
+    command: ["/usr/bin/qwen3-llm", "-u"]
     ports:
       - "your-value-goes-here:3000:3000"   # localhost only — never 0.0.0.0
     networks:
@@ -104,7 +107,7 @@ services:
         max-file: "3"
 
   falco: # Falco Security Service
-    image: falcosecurity/falco:sha256-783701a70f041fc07abdecb00918ce0673d071cea643c9f8144b3ad9607c6b9b
+    image: falcosecurity/falco@sha256:9f3e058ce652ecf98aa2b4d8a41e80385b08ecb17d3153bb1d1a03a406378a31
     container_name: falco-1
     # falco needs host PID + cap_sys_ptrace; "privileged:true" is avoided here
     pid: host

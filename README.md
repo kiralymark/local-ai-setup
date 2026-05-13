@@ -67,27 +67,15 @@ Create non-root users for containers. (Source: --)
 --- logging to file or sending alerts to owner email (Source: --)  
 
   
-### Components currently in the project:
-  
-AI_1 --  
-  
-AI_2 --  
-  
-Open web UI  
-  
-Falco (security)  [ recommended to be used ]  
-  
-~ Connection to VS Code  
-
-  
 ### Wishlisted AI -s / Wishlisted technologies to try:  
 --   
 
 
   
 ### Local AI Setup steps, commands:  
--- 
 
+docker-compose up --build
+  
 
   
 ### Local AI Setup in VSCode steps, commands:  
