@@ -1,8 +1,21 @@
+# Define macros
+- macro: bin_dir
+  condition: fd.directory in (/bin, /sbin, /usr/bin, /usr/sbin, /usr/local/bin, /usr/local/sbin)
+
+# Define the write macro
+- macro: open_write
+  condition: (evt.type in (open, openat, openat2)) and (evt.arg.flags contains O_WRONLY or evt.arg.flags contains O_RDWR or evt.arg.flags contains O_CREAT)
+
+# Define the chmod macro
+- macro: chmod
+  condition: (evt.type in (chmod, fchmod, fchmodat))
+
+
   # --- Shell Spawned in Container ---
 - rule: Shell Spawned in Container
   desc: Detect a shell being started inside a container
   condition: container.id != host and proc.name in (shell_binaries) and evt.type = execve
-  output: "Shell spawned in container (user=%user.name %container.info proc_main=%proc.name cmdline=%proc.cmdline)"
+  output: "Shell spawned in container (user=%user.name %container.id %container.name proc_main=%proc.name cmdline=%proc.cmdline)"
   priority: WARNING
 
 # --- Execution from /dev/shm ---
@@ -22,20 +35,19 @@
 # --- Privileged Container Started ---
 - rule: Privileged Container Started
   desc: Detects containers started with the --privileged flag
-  condition: container.start and container.privileged = true
+  condition: evt.type=container and container.privileged=true
   output: "Privileged container started (name=%container.name image=%container.image.repository)"
   priority: CRITICAL
 
 # --- Sensitive Mounts Detected ---
 - rule: Sensitive Host Mount
-  desc: Detects mounts to sensitive host paths
+  desc: Detect container mounting sensitive host directories
   condition: >
-    container.start and (
-      container.mount.dest = "/" or 
-      container.mount.dest = "/etc" or 
-      container.mount.dest = "/var/run/docker.sock"
-    )
-  output: "Sensitive host path mounted to container (name=%container.name map=%container.mount.dest)"
+    evt.type=container and
+    (fd.name startswith /host-etc or
+     fd.name startswith /host-root or
+     fd.name=/var/run/docker.sock)
+  output: "Sensitive host directory accessed (path=%fd.name container=%container.name)"
   priority: CRITICAL
 
 # --- Sensitive File Access ---
@@ -68,13 +80,11 @@
 
 # --- Container Drift (File Integrity) ---
 - rule: Write below binary dir
-  desc: Detects writes to /bin, /sbin, /usr/bin etc (Indicates drift/web-shell)
-  condition: >
-    evt.type = open and write_allowed and 
-    (fd.name startswith "/bin/" or fd.name startswith "/usr/bin/" or fd.name startswith "/sbin/")
-  output: "File integrity violation: Write to binary dir (user=%user.name file=%fd.name)"
+  desc: An attempt to write below a binary directory
+  condition: bin_dir and open_write
+  output: "File below binary dir opened for writing (file=%fd.name)"
   priority: ERROR
-
+  tags: [filesystem, mitre_persistence]
 
 # -- Detect /dev/mem access --
 - rule: Detected a /dev/mem Access
@@ -104,15 +114,16 @@
   tags: [security, shell]
 
 # -- Privilege escalation attempt --
-- rule: Setuid or Setgid Bit Execution
-  desc: A binary with setuid/setgid was executed
+- rule: Setuid or Setgid Bit
+  desc: >
+    This rule is focused on detecting the use of setuid or setgid bits set via chmod. These bits, when set for an application,
+    result in the application running with the privileges of the owning user or group. By enabling the setuid or setgid bits,
+    an attacker could run code in a different user's context, possibly with elevated privileges. However, there's a trade-off
+    with noise, given that numerous applications legitimately run chmod. This rule is related to the "Non sudo setuid" rule.
   condition: >
-    spawned_process
-    and (proc.is_suid=true or proc.is_sgid=true)
-    and container
-  output: >
-    Setuid/setgid binary executed (proc=%proc.name cmd=%proc.cmdline
-    user=%user.name container=%container.id image=%container.image.repository)
+    chmod
+    and (evt.arg.mode contains "S_ISUID" or evt.arg.mode contains "S_ISGID")
+  output: Setuid or setgid bit is set via chmod | fd=%evt.arg.fd filename=%evt.arg.filename mode=%evt.arg.mode evt_type=%evt.type user=%user.name user_uid=%user.uid user_loginuid=%user.loginuid process=%proc.name proc_exepath=%proc.exepath parent=%proc.pname command=%proc.cmdline terminal=%proc.tty
   priority: ERROR
   tags: [security, privilege_escalation]
 

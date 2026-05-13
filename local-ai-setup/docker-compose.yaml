@@ -1,109 +1,18 @@
 networks:
-  ai-internal:       # LLMs + WebUI talk here — never exposed
-    driver: bridge
-    internal: true   # blocks all external routing from this network
   webui-dmz:         # Only WebUI sits here for its host port binding
     driver: bridge
 
 volumes:
-  ollama-data:
   open-webui:
   falco-logs:
 
 services:
-  ollama:
-    image: ollama/ollama:0.20.2@sha256:45123a2e5b8cba2d886a60eeaa6a72c58eac135ad1414d3fd15c12f7eac7e75d
-    container_name: ollama-1
-    volumes:
-      - ollama-data:/root/.ollama
-    ports:
-      - "your-value-goes-here:11434:11434"
-    networks:
-      - ai-internal
-    deploy: # Optional: Enable this if you have an NVIDIA GPU
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
-
-
-# FURTHER CHANGES REQUIRED?
-#
-# Integrate ollama instead ? -- X -- no, I dont want to ...
-
-
-  smollm2-llm:
-    image: ai/smollm2-vllm:135M@sha256:4951f8c986b16e1617926290e78f45b15660c136405ecb63511732d572d3e466
-    container_name: smollm2-llm-1
-    command: ["/usr/bin/smollm2-llm", "-u"]
-    # No host port binding — WebUI reaches it over ai-internal only
-    networks:
-      - ai-internal
-    ports:
-      - "your-value-goes-here:11434:11434"
-    volumes:
-      - smollm2-llm:/root/.smollm2-llm
-    security_opt:
-      - no-new-privileges:true
-      - apparmor:docker-default   # swap for a custom profile here if you write one
-      - seccomp:./seccomp-default.json
-    read_only: true
-    tmpfs:
-      - /tmp:size=128m,noexec,nosuid
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-    restart: unless-stopped
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-  qwen3-llm:
-    image: ai/qwen3:0.6B-Q4_K_M@sha256:18e5114fc13b1abd44b7fa36e24c951ab31c66d4aeccf3f6836a97f99f339923
-    container_name: qwen3-llm-1
-    command: ["/usr/bin/qwen3-llm", "-u"]
-    # No host port — WebUI uses the service name + internal port 11434
-    networks:
-      - ai-internal
-    volumes:
-      - qwen3-llm:/root/.qwen3-llm
-    security_opt:
-      - no-new-privileges:true
-      - apparmor:docker-default
-      - seccomp:./seccomp-default.json
-    read_only: true
-    tmpfs:
-      - /tmp:size=128m,noexec,nosuid
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-    restart: unless-stopped
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-
   open-webui:
     image: ghcr.io/open-webui/open-webui:v0.8.12
     container_name: open-webui-1
-    command: ["/usr/bin/qwen3-llm", "-u"]
     ports:
       - "your-value-goes-here:3000:3000"   # localhost only — never 0.0.0.0
     networks:
-      - ai-internal   # reaches the LLMs
       - webui-dmz     # exposes the host port
     environment:
       # We point to the service names and their internal ports
@@ -111,16 +20,17 @@ services:
       # 2 - ? modify to your-value-goes-here:PORTNUMBER/api;... 
       # Both LLMs are reached by service name on their INTERNAL port (11434)
       # qwen3 maps host 11434 internally, so here we use 11434 directly
-      - OLLAMA_BASE_URLS=http://smollm2-llm:11434;http://qwen3-llm:11435
+      - OPENAI_API_BASE_URL=http://model-runner.docker.internal/engines/llama.cpp/v1
+      - OPENAI_API_KEY=ignored          # required field but value doesn't matter
+      - OFFLINE_MODE=true         # disables telemetry and update checks
+    extra_hosts:
+      - "model-runner.docker.internal:host-gateway"  # resolves the Docker Desktop endpoint
     volumes:
       - open-webui:/app/backend/data
     security_opt:
       - no-new-privileges:true
       - apparmor:docker-default
       - seccomp:./seccomp-default.json
-    depends_on:
-          - smollm2-llm
-          - qwen3-llm
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -136,13 +46,18 @@ services:
     cap_add:
       - SYS_PTRACE
       - SYS_RESOURCE
+      - BPF           # Required for modern BPF
+      - PERFMON       # Required for modern BPF
     security_opt:
       - apparmor:unconfined   # Falco needs this; everything else is locked
+      - seccomp:unconfined    # Add this to ensure BPF maps aren't blocked
     environment:
+      - FALCO_BPF_PROBE=      # Ensure this is empty to use modern BPF
       - FALCO_GRPC_ENABLED=false
       - FALCO_WEBSERVER_ENABLED=false   # no extra attack surface
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /dev:/dev:ro
       - /proc:/host/proc:ro
       - /boot:/host/boot:ro
       - /lib/modules:/host/lib/modules:ro
