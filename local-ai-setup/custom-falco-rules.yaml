@@ -1,6 +1,148 @@
-- rule: Detect /dev/mem Access
-  desc: Detect processes that attempt to read /dev/mem
-  condition: (evt.type=open or evt.type=openat) and fd.name=/dev/mem
-  output: "Process %proc.name accessed /dev/mem (command=%proc.cmdline user=%user.name container=%container.id image=%container.image.repository)"
+  # --- Shell Spawned in Container ---
+- rule: Shell Spawned in Container
+  desc: Detect a shell being started inside a container
+  condition: container.id != host and proc.name in (shell_binaries) and evt.type = execve
+  output: "Shell spawned in container (user=%user.name %container.info proc_main=%proc.name cmdline=%proc.cmdline)"
   priority: WARNING
-  tags: [security]
+
+# --- Execution from /dev/shm ---
+- rule: Execution from shared memory
+  desc: Detects binaries running from /dev/shm (common for fileless malware)
+  condition: proc.exe startswith /dev/shm/ and evt.type = execve
+  output: "Binary executed from /dev/shm (user=%user.name cmdline=%proc.cmdline container=%container.id)"
+  priority: CRITICAL
+
+# --- Docker Exec Detected ---
+- rule: External User Exec into Container
+  desc: Detects when someone uses 'docker exec' to enter a container
+  condition: spawned_process and container.id != host and proc.name = docker-tar
+  output: "External exec detected (user=%user.name container=%container.name cmdline=%proc.cmdline)"
+  priority: WARNING
+
+# --- Privileged Container Started ---
+- rule: Privileged Container Started
+  desc: Detects containers started with the --privileged flag
+  condition: container.start and container.privileged = true
+  output: "Privileged container started (name=%container.name image=%container.image.repository)"
+  priority: CRITICAL
+
+# --- Sensitive Mounts Detected ---
+- rule: Sensitive Host Mount
+  desc: Detects mounts to sensitive host paths
+  condition: >
+    container.start and (
+      container.mount.dest = "/" or 
+      container.mount.dest = "/etc" or 
+      container.mount.dest = "/var/run/docker.sock"
+    )
+  output: "Sensitive host path mounted to container (name=%container.name map=%container.mount.dest)"
+  priority: CRITICAL
+
+# --- Sensitive File Access ---
+- rule: Access to Sensitive Files
+  desc: Detects attempts to read shadow files or K8s tokens
+  condition: >
+    evt.type = open and (
+      fd.name = "/etc/shadow" or 
+      fd.name = "/etc/sudoers" or 
+      fd.name startswith "/var/run/secrets/kubernetes.io/serviceaccount"
+    )
+  output: "Sensitive file accessed (user=%user.name file=%fd.name container=%container.id)"
+  priority: CRITICAL
+
+# --- New Outbound Connection ---
+- rule: Unauthorized Outbound Connection
+  desc: Detects containers making outbound connections (exclude internal LLM comms)
+  condition: >
+    outbound and fd.port != 11434 and fd.port != 11435
+    and container.id != host
+  output: "Unauthorized outbound connection (proc=%proc.name dest=%fd.sip:%fd.sport)"
+  priority: WARNING
+
+# --- Kernel Module Loading ---
+- rule: Kernel Module Loading in Container
+  desc: Detects attempts to load kernel modules from within a container
+  condition: container.id != host and evt.type in (init_module, finit_module, delete_module)
+  output: "Kernel module modification attempt (user=%user.name proc=%proc.name)"
+  priority: CRITICAL
+
+# --- Container Drift (File Integrity) ---
+- rule: Write below binary dir
+  desc: Detects writes to /bin, /sbin, /usr/bin etc (Indicates drift/web-shell)
+  condition: >
+    evt.type = open and write_allowed and 
+    (fd.name startswith "/bin/" or fd.name startswith "/usr/bin/" or fd.name startswith "/sbin/")
+  output: "File integrity violation: Write to binary dir (user=%user.name file=%fd.name)"
+  priority: ERROR
+
+
+# -- Detect /dev/mem access --
+- rule: Detected a /dev/mem Access
+  desc: Process attempted to read raw kernel memory
+  condition: >
+    (evt.type=open or evt.type=openat)
+    and fd.name=/dev/mem
+  output: >
+    /dev/mem was accessed (proc=%proc.name cmd=%proc.cmdline
+    user=%user.name container=%container.id image=%container.image.repository)
+  priority: WARNING
+  tags: [security, memory]
+
+# -- Shell spawned inside a container (unusual for LLM/WebUI workloads) --
+- rule: Shell Spawned in a Container
+  desc: A shell was launched inside a running container
+  condition: >
+    spawned_process
+    and container
+    and proc.name in (bash, sh, zsh, dash, ksh)
+    and not proc.pname in (bash, sh, zsh)
+  output: >
+    Shell was spawned in a container (shell=%proc.name parent=%proc.pname
+    cmd=%proc.cmdline user=%user.name container=%container.id
+    image=%container.image.repository)
+  priority: WARNING
+  tags: [security, shell]
+
+# -- Privilege escalation attempt --
+- rule: Setuid or Setgid Bit Execution
+  desc: A binary with setuid/setgid was executed
+  condition: >
+    spawned_process
+    and (proc.is_suid=true or proc.is_sgid=true)
+    and container
+  output: >
+    Setuid/setgid binary executed (proc=%proc.name cmd=%proc.cmdline
+    user=%user.name container=%container.id image=%container.image.repository)
+  priority: ERROR
+  tags: [security, privilege_escalation]
+
+# -- Unexpected outbound network connection from LLM containers --
+#- rule: Unexpected Outbound Connection from LLM
+#  desc: LLM container made a network connection that isn't to the WebUI
+#  condition: >
+#    evt.type=connect
+#    and container.image.repository contains "smollm2"
+#       or container.image.repository contains "qwen3"
+#    and fd.typechar=4   # IPv4
+#    and not fd.rip in (#your-value-goes-here)
+#  output: >
+#    Unexpected outbound connection from LLM container
+#    (proc=%proc.name dest=%fd.rip:%fd.rport container=%container.id
+#    image=%container.image.repository)
+#  priority: WARNING
+#  tags: [security, network]
+
+# -- Write to sensitive host path via mount --
+- rule: Write to Sensitive Mounted Path
+  desc: A container wrote to a host path it shouldn't
+  condition: >
+    open_write
+    and container
+    and (fd.name startswith /host/boot
+         or fd.name startswith /host/lib/modules
+         or fd.name startswith /host/usr)
+  output: >
+    Write to sensitive mounted host path (proc=%proc.name file=%fd.name
+    container=%container.id image=%container.image.repository)
+  priority: ERROR
+  tags: [security, filesystem]

@@ -2,18 +2,18 @@
 Setting up local AI at home. Technologies: Docker, Open WebUI, VS Code Continue extension, ...
   
   
-Technologies used:  
--- ai/smollm2-vllm:135M  
--- ai/qwen3:0.6B-Q4_K_M  
--- ghcr.io/open-webui/open-webui:v0.8.12  
--- falcosecurity/falco  
+**Technologies used:**  
+-- ai/smollm2-vllm:135M (SmolLM 2 VLLM 135M)  
+-- ai/qwen3:0.6B-Q4_K_M (Qwen3 0.6B-Q4_K_M)  
+-- ghcr.io/open-webui/open-webui:v0.8.12 (Open WebUI v0.8.12)  
+-- falcosecurity/falco (Falco version: 0.43.1)  
 -- Docker version: 29.2.0  
 -- Docker Desktop: 4.60.0  
 -- VS Code version: 1.119.0  
 -- VS Code: Continue extension (1.2.22)  
 
   
-Wishlisted technologies:  
+**Wishlisted technologies:**  
 -- GPT-OSS 20B  
 -- Qwen3-Coder 32B  
 -- Wazuh (security)  
@@ -24,12 +24,17 @@ Wishlisted technologies:
 Note:    
 Content censor is required on github.  
 Censor out private info!  
+  
+Note:  
+WARNING!  
+Currently there are false positive security alerts 
+in Falco logs.  
 
   
 ### Hardware specs:  
 VRAM: 16 GB  
 RAM:  32 GB  
-Storage: 1TB SSD  
+Storage: 1 TB SSD  
   
   
 ### Project Guidelines That Should Be Followed:  
@@ -61,35 +66,6 @@ Create non-root users for containers. (Source: --)
 
 --- logging to file or sending alerts to owner email (Source: --)  
 
-
-  
-### Project file structure:  
-test . text . example .  
-/Project_Root  
-├── /src  
-│──├── main.py  
-│──└── utils.py  
-├── /docs  
-│──└── README.md  
-│── /assets  
-│──└── logo.png  
-├── Readme2.md  
-  
-
-├── hidden folder (hidden)  
-├── hidden  
-
-  
-test . text . example .  
-/Project_Root  
-├── /src  
-│──├── main.py  
-│──└── utils.py  
-├── /docs  
-│──└── README.md  
-└── /assets  
-    └── logo.png  
-  
   
 ### Components currently in the project:
   
@@ -102,6 +78,7 @@ Open web UI
 Falco (security)  [ recommended to be used ]  
   
 ~ Connection to VS Code  
+
   
 ### Wishlisted AI -s / Wishlisted technologies to try:  
 --   
